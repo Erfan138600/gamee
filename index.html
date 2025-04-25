@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>بازی حباب‌های رنگی</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body, html {
+      font-family: 'Vazirmatn', sans-serif;
+      background: linear-gradient(135deg,#5eead4 0%,#3b82f6 100%);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .bubble {
+      transition: box-shadow 0.1s;
+    }
+    #gameArea {
+      touch-action: manipulation;
+      user-select: none;
+      background: rgba(255,255,255,0.15);
+      border-radius: 1rem;
+      box-shadow: 0 6px 32px rgba(40,60,120,0.15);
+      margin: 0 auto;
+      max-width: 420px
+    }
+    .p{
+        color: red;
+    }
+
+  </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen px-4 relative">
+  <div class="w-full max-w-lg text-center mt-6 mb-2">
+    <h1 class="font-bold text-3xl text-white drop-shadow mb-2">🎈 بازی حباب‌های رنگی</h1>
+    <p class="text-white text-lg mb-2">هر حبابی که ظاهر می‌شود را سریع لمس یا کلیک کن! امتیاز بگیر و رکورد بزن!</p>
+  </div>
+  <div id="gameArea"
+       class="relative overflow-hidden w-full max-w-xs h-96 sm:h-[480px] bg-white bg-opacity-30 flex flex-col items-center justify-center select-none mt-2 mb-3 shadow-lg">
+    <div id="startScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-white bg-opacity-80 z-30">
+      <i class="fa-solid fa-circle-play text-blue-400 text-7xl mb-4"></i>
+      <button id="startBtn"
+        class="bg-blue-500 text-white font-bold px-8 py-3 rounded-lg shadow-lg hover:bg-blue-600 transition mb-2">
+        شروع بازی
+      </button>
+      <div class="text-gray-700 text-base">حباب‌های رنگی را لمس یا کلیک کن و امتیاز جمع کن!</div>
+    </div>
+    <canvas id="bubbleCanvas" width="360" height="384" class="block mx-auto"></canvas>
+    <div id="gameOverScreen"
+        class="absolute inset-0 flex flex-col items-center justify-center bg-white bg-opacity-90 z-40 hidden">
+      <i class="fa-solid fa-trophy text-4xl text-yellow-400 mb-3"></i>
+      <div class="font-bold text-xl text-gray-700 mb-2">پایان بازی!</div>
+      <div id="finalScore" class="text-lg text-gray-800 mb-4"></div>
+      <button id="restartBtn"
+        class="bg-green-500 text-white font-bold px-8 py-3 rounded-lg shadow-lg hover:bg-green-600 transition mb-2">
+        شروع دوباره
+      </button>
+      <div id="bestScoreDisplay" class="text-gray-700 text-base"></div>
+    </div>
+    <div class="absolute left-0 right-0 top-3 flex items-center justify-between px-4 z-20 pointer-events-none">
+      <div id="scoreBox" class="bg-gray-100 bg-opacity-60 rounded-md px-2 py-1 text-lg text-blue-800 font-bold min-w-[68px] flex items-center justify-center pointer-events-auto select-none">
+        <i class="fa-solid fa-star text-yellow-400 mr-1 ml-1"></i>
+        <span id="score">0</span>
+      </div>
+      <div id="timerBox" class="bg-gray-100 bg-opacity-50 rounded-md px-2 py-1 text-lg text-blue-800 font-bold flex items-center min-w-[62px] pointer-events-auto select-none">
+        <i class="fa-regular fa-clock text-blue-400 mr-1 ml-1"></i>
+        <span id="timer">30</span> ثانیه
+      </div>
+    </div>
+  </div>
+  <footer class="text-white text-xs mb-2">
+ برنامه نویس وب-عرفان علیخانی| <span class="text-blue-200">2025</span>
+ <p class="p"><a href="https://erfan-web.ir">www.erfan-web.ir</a> <وبسایت من> </p>
+
+  </footer>
+  <script>
+    // Responsive canvas scaling
+    function resizeCanvas() {
+      const canvas = document.getElementById('bubbleCanvas');
+      let w = Math.min(360, window.innerWidth - 32);
+      let h = Math.max(320, Math.floor(w * 1.06));
+      canvas.width = w;
+      canvas.height = h;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // Game Variables
+    const canvas = document.getElementById('bubbleCanvas');
+    const ctx = canvas.getContext('2d');
+    const startScreen = document.getElementById('startScreen');
+    const startBtn = document.getElementById('startBtn');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const restartBtn = document.getElementById('restartBtn');
+    const scoreSpan = document.getElementById('score');
+    const timerSpan = document.getElementById('timer');
+    const finalScoreDiv = document.getElementById('finalScore');
+    const bestScoreDisplay = document.getElementById('bestScoreDisplay');
+
+    let bubbles = [];
+    let score = 0;
+    let timer = 30;
+    let interval, timerInterval, drawing = false;
+    let bubbleRadius = 28;
+    let minBubbleRadius = 20, maxBubbleRadius = 40;
+    let spawnInterval = 820;
+    let isGameOver = false;
+    let bestScore = localStorage.getItem('bubbleGameBestScore') ? parseInt(localStorage.getItem('bubbleGameBestScore')) : 0;
+
+    const COLORS = [
+      "#fb7185", // pink
+      "#38bdf8", // sky
+      "#facc15", // yellow
+      "#34d399", // green
+      "#6366f1", // indigo
+      "#f472b6", // rose
+      "#f59e42", // orange
+      "#a21caf", // violet
+      "#14b8a6"  // teal
+    ];
+
+    function rnd(a,b) { return Math.random()*(b-a)+a; }
+    function choose(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+
+    function resetGame() {
+      window.cancelAnimationFrame(interval);
+      if (timerInterval) clearInterval(timerInterval);
+      bubbles = [];
+      score = 0;
+      timer = 30;
+      isGameOver = false;
+      scoreSpan.textContent = score;
+      timerSpan.textContent = timer;
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+      hideGameOver();
+    }
+
+    function showGameOver() {
+      finalScoreDiv.innerHTML = `<span class="font-bold">${score}</span> امتیاز گرفتی!`;
+      if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem('bubbleGameBestScore', score+'');
+        bestScoreDisplay.textContent = '👏 رکورد جدید ثبت شد!';
+      } else if (bestScore) {
+        bestScoreDisplay.textContent = `رکورد شما: ${bestScore}`;
+      } else {
+        bestScoreDisplay.textContent = '';
+      }
+      gameOverScreen.classList.remove('hidden');
+    }
+
+    function hideGameOver() {
+      gameOverScreen.classList.add('hidden');
+    }
+
+    function endGame() {
+      isGameOver = true;
+      showGameOver();
+      window.cancelAnimationFrame(interval);
+      if (timerInterval) clearInterval(timerInterval);
+    }
+
+    function spawnBubble() {
+      // No overlap with others
+      let attempts = 0, x, y, r = rnd(minBubbleRadius, maxBubbleRadius);
+      do {
+        x = rnd(r+10, canvas.width - r - 10);
+        y = rnd(r+24, canvas.height - r - 10);
+        attempts += 1;
+        if (attempts > 16) break;
+      } while (bubbles.some(b => Math.hypot(b.x-x, b.y-y) < b.r+r+12));
+      bubbles.push({
+        x:x,
+        y:y,
+        r:r,
+        color: choose(COLORS),
+        appear: 0,
+        life: rnd(0.9,1.5),
+        shadow: 0
+      });
+    }
+
+    function drawBubbles(dt) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      bubbles.forEach((b,i) => {
+        // Animation pulse
+        let pulse = Math.sin(b.appear*Math.PI) * 4;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, b.appear+0.10);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r + pulse, 0, Math.PI*2);
+        // Gradient
+        let grad = ctx.createRadialGradient(b.x, b.y, b.r*0.4, b.x, b.y, b.r+pulse);
+        grad.addColorStop(0, "rgba(255,255,255,0.82)");
+        grad.addColorStop(0.4, b.color+"cc");
+        grad.addColorStop(1, b.color+"44");
+        ctx.fillStyle = grad;
+        ctx.shadowColor = b.color;
+        ctx.shadowBlur = 10+b.shadow;
+        ctx.fill();
+        // Outline
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#ffffffcc";
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+
+    function updateBubbles(dt) {
+      for(let i=0; i<bubbles.length; ++i){
+        bubbles[i].appear = Math.min(1, bubbles[i].appear + dt*1.8);
+      }
+      // Remove bubbles whose life is up
+      const elapsed = 1/(1000/spawnInterval);
+      let removed = 0;
+      for(let i=0; i<bubbles.length; ++i){
+        let b = bubbles[i];
+        b.life -= dt;
+        if (b.life <= 0) {
+          removed++;
+          bubbles.splice(i,1);
+          i--;
+        }
+      }
+    }
+
+    function animate(now) {
+      if (isGameOver) return;
+      let dt = 1/60;
+      updateBubbles(dt);
+      drawBubbles(dt);
+      interval = window.requestAnimationFrame(animate);
+    }
+
+    function gameLoop() {
+      bubbles = [];
+      drawBubbles(0);
+      // Game time
+      timerSpan.textContent = timer;
+      scoreSpan.textContent = score;
+      timerInterval = setInterval(function(){
+        timer -= 1;
+        timerSpan.textContent = timer;
+        if (timer <= 0) {
+          endGame();
+        }
+      }, 1000);
+      // Auto spawn bubble every spawnInterval ms
+      function spawner() {
+        if (isGameOver) return;
+        spawnBubble();
+        setTimeout(spawner, spawnInterval - Math.min(score*6,200));
+      }
+      spawner();
+      // Drawing starts
+      interval = requestAnimationFrame(animate);
+    }
+
+    // Bubble click/tap detection
+    function getPointerPos(evt) {
+      let rect = canvas.getBoundingClientRect();
+      let x=0,y=0;
+      if(evt.touches && evt.touches.length > 0){
+        x = evt.touches[0].clientX - rect.left;
+        y = evt.touches[0].clientY - rect.top;
+      } else if (evt.changedTouches && evt.changedTouches.length > 0){
+        x = evt.changedTouches[0].clientX - rect.left;
+        y = evt.changedTouches[0].clientY - rect.top;
+      } else {
+        x = evt.clientX - rect.left;
+        y = evt.clientY - rect.top;
+      }
+      return { x, y };
+    }
+
+    function handleBubbleClick(evt) {
+      if(isGameOver) return;
+      const { x, y } = getPointerPos(evt);
+      // From top to down to hit upper bubble first if overlap
+      for(let i=bubbles.length-1;i>=0;--i){
+        let b = bubbles[i];
+        if(Math.hypot(b.x-x, b.y-y)<=b.r+2){
+          // Score
+          score += 1;
+          scoreSpan.textContent = score;
+          // Pop effect
+          b.shadow = 36;
+          setTimeout(()=> {
+            bubbles.splice(i,1);
+          }, 80);
+          // Visual feedback & sound (small pop!)
+          window.navigator.vibrate?.(26);
+          return;
+        }
+      }
+    }
+
+    // Mouse & Touch events
+    canvas.addEventListener('click', handleBubbleClick, false);
+    canvas.addEventListener('touchstart', function(e){
+      handleBubbleClick(e);
+      e.preventDefault();
+    }, {passive:false});
+    
+    // Prevent scrolling on touch
+    document.getElementById('gameArea').addEventListener('touchmove', function(e){
+      e.preventDefault();
+    }, {passive:false});
+
+    // Start/Restart events
+    startBtn.addEventListener('click', function(){
+      startScreen.classList.add('hidden');
+      resetGame();
+      setTimeout(gameLoop, 320);
+    });
+    restartBtn.addEventListener('click', function(){
+      gameOverScreen.classList.add('hidden');
+      resetGame();
+      setTimeout(gameLoop, 300);
+    });
+
+    // Prevent double tap zoom on mobile (for game area)
+    let lastTouchEnd = 0;
+    document.getElementById('gameArea').addEventListener('touchend', function(e){
+      let now = (new Date()).getTime();
+      if (now - lastTouchEnd <= 350) e.preventDefault();
+      lastTouchEnd = now;
+    }, false);
+
+    // On load, set best score if any
+    if (bestScore && bestScore > 0) {
+      bestScoreDisplay.textContent = `رکورد شما: ${bestScore}`;
+    }
+  </script>
+</body>
+</html>
